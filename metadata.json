@@ -1,0 +1,6 @@
+{
+  "name": "YouTube Trends Viewer",
+  "description": "A dashboard to view trending topics on YouTube.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
