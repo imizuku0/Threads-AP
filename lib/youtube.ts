@@ -307,6 +307,7 @@ export async function generateSummarySiteClient(youtubeToken: string, geminiToke
 以下のYouTube動画のタイトルと、その動画についたいいね数の多いトップコメントリストを分析し、「まとめサイト（2ch風、またはトレンドブログ風）」のHTMLを生成してください。
 
 動画タイトル: ${videoTitle}
+動画URL: https://www.youtube.com/watch?v=${videoId}
 
 コメントリスト (形式: [いいね数] ユーザー名: コメント):
 ${comments.map((c: any) => `[${c.likeCount}いいね] ${c.authorDisplayName}: ${c.textOriginal}`).join('\n')}
@@ -315,8 +316,11 @@ ${comments.map((c: any) => `[${c.likeCount}いいね] ${c.authorDisplayName}: ${
 1.  HTML、CSSを含む1つの完全なHTMLファイルとして出力してください（プレビュー表示用）。
 2.  Tailwind CSSをCDN（<script src="https://cdn.tailwindcss.com"></script>）で読み込んでスタイリングしてください。
 3.  まとめサイトの構成（ヘッダー、アイキャッチタイトル、スレッド風のレスや吹き出し風のコメント表示、AIによる総評やまとめ）を含めてください。
-4.  ユーザーが見て楽しめるような、キャッチーでまとまった内容にしてください。
-5.  レスポンスはHTMLのコードのみ（\`\`\`html ... \`\`\` は不可、最初から <!DOCTYPE html> で始めてください）にしてください。
+4.  「元動画へのリンク」として、動画URL: https://www.youtube.com/watch?v=${videoId} を必ず記載してください。
+5.  レイアウトは、シンプルで読みやすいブログスタイルで統一してください。
+6.  存在しないリンクや、プレースホルダー的な偽のリンク（メニューや外部サイトへのダミーなど）は絶対に含めないでください。動画へのリンク以外は禁止です。
+7.  ユーザーが見て楽しめるような、キャッチーでまとまった内容にしてください。
+8.  レスポンスはHTMLのコードのみ（\`\`\`html ... \`\`\` は不可、最初から <!DOCTYPE html> で始めてください）にしてください。
 `;
 
   const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${geminiToken}`;

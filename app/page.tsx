@@ -40,23 +40,24 @@ export default function YouTubeTrendsApp() {
   const [dataSource, setDataSource] = useState<string>('');
   const [rawPostCount, setRawPostCount] = useState<number>(0);
   const [errorMsg, setErrorMsg] = useState<string>('');
+  const [quotaWarning, setQuotaWarning] = useState<string>('');
   const [expandedTrendId, setExpandedTrendId] = useState<number | null>(null);
   
   // API Authentication State
   const [showSettings, setShowSettings] = useState(false);
   const [inputToken, setInputToken] = useState('');
   const [inputGeminiToken, setInputGeminiToken] = useState('');
-  const [inputKeywords, setInputKeywords] = useState('AIツール, ワールドカップ, Next.js, 週末, 映画, アニメ, 料理, キャンプ, ガジェット, 旅行, 筋トレ, 投資');
+  const [inputKeywords, setInputKeywords] = useState('AIツール, Next.js, ガジェット, 投資');
   
   const [activeToken, setActiveToken] = useState('');
   const [activeGeminiToken, setActiveGeminiToken] = useState('');
-  const [activeKeywords, setActiveKeywords] = useState('AIツール, ワールドカップ, Next.js, 週末, 映画, アニメ, 料理, キャンプ, ガジェット, 旅行, 筋トレ, 投資');
+  const [activeKeywords, setActiveKeywords] = useState('AIツール, Next.js, ガジェット, 投資');
   const [videoType, setVideoType] = useState<'all' | 'regular' | 'shorts'>('all');
   const [activeVideoType, setActiveVideoType] = useState<'all' | 'regular' | 'shorts'>('all');
   const [timeRange, setTimeRange] = useState<'all' | 'hour' | 'day' | 'week' | 'month' | 'year'>('all');
   const [activeTimeRange, setActiveTimeRange] = useState<'all' | 'hour' | 'day' | 'week' | 'month' | 'year'>('all');
-  const [searchMode, setSearchMode] = useState<'keywords' | 'popular'>('keywords');
-  const [activeSearchMode, setActiveSearchMode] = useState<'keywords' | 'popular'>('keywords');
+  const [searchMode, setSearchMode] = useState<'keywords' | 'popular'>('popular');
+  const [activeSearchMode, setActiveSearchMode] = useState<'keywords' | 'popular'>('popular');
   
   const [connectionStatus, setConnectionStatus] = useState<'idle' | 'testing' | 'success' | 'error'>('idle');
 
@@ -229,6 +230,7 @@ export default function YouTubeTrendsApp() {
   const fetchTrends = async (tokenToUse?: string, keywordsToUse?: string, videoTypeToUse?: string, timeRangeToUse?: string, searchModeToUse?: 'keywords' | 'popular') => {
     setIsLoading(true);
     setErrorMsg('');
+    setQuotaWarning('');
     try {
       const kw = keywordsToUse !== undefined ? keywordsToUse : activeKeywords;
       const vt = videoTypeToUse !== undefined ? videoTypeToUse : activeVideoType;
@@ -237,10 +239,34 @@ export default function YouTubeTrendsApp() {
       const mode = searchModeToUse !== undefined ? searchModeToUse : activeSearchMode;
       
       let data;
-      if (mode === 'popular') {
-        data = await fetchYouTubePopularVideos(token, vt);
-      } else {
-        data = await fetchYouTubeTrends(token, kw, vt, tr);
+      let finalMode = mode;
+      
+      try {
+        if (mode === 'popular') {
+          data = await fetchYouTubePopularVideos(token, vt);
+        } else {
+          data = await fetchYouTubeTrends(token, kw, vt, tr);
+        }
+      } catch (err: any) {
+        const errMsg = err.message || '';
+        const isQuotaError = 
+          errMsg.toLowerCase().includes('quota') || 
+          errMsg.toLowerCase().includes('limit') || 
+          errMsg.toLowerCase().includes('search queries') || 
+          errMsg.includes('youtube.googleapis.com');
+          
+        if (isQuotaError && mode === 'keywords') {
+          console.warn('Keyword search failed due to quota limit. Falling back to popular videos mode.', err);
+          setQuotaWarning('「キーワード検索」のAPI利用制限（クォータ上限）に達したため、自動的に「急上昇トレンド」モード（クォータ消費が極小のモード）に切り替えました。継続してキーワード検索を行うには、右上の設定アイコンからご自身のYouTube APIキーを設定してください。');
+          
+          setSearchMode('popular');
+          setActiveSearchMode('popular');
+          finalMode = 'popular';
+          
+          data = await fetchYouTubePopularVideos(token, vt);
+        } else {
+          throw err;
+        }
       }
       
       setTrends(data.trends || []);
@@ -248,7 +274,7 @@ export default function YouTubeTrendsApp() {
       setLastUpdated(new Date(data.timestamp || Date.now()));
       setRawPostCount(data.rawPostCount || 0);
       
-      if (mode === 'popular' && data.trends && data.trends.length > 0) {
+      if (finalMode === 'popular' && data.trends && data.trends.length > 0) {
         setExpandedTrendId(data.trends[0].id);
       }
       
@@ -687,6 +713,28 @@ export default function YouTubeTrendsApp() {
                 </div>
               </div>
             )}
+          </div>
+        )}
+
+        {/* Quota Fallback Warning */}
+        {quotaWarning && (
+          <div className="mb-6 p-4 bg-amber-950/40 border border-amber-900/50 rounded-2xl flex gap-3 text-sm text-amber-200 animate-in fade-in zoom-in-95">
+            <AlertCircle className="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" />
+            <div className="space-y-2 flex-1">
+              <p className="font-semibold text-amber-300">YouTube API利用制限による自動フォールバック</p>
+              <p className="text-xs text-amber-200/80 leading-relaxed">
+                {quotaWarning}
+              </p>
+              <div className="flex justify-end pt-1">
+                <button
+                  onClick={() => setShowSettings(true)}
+                  className="flex items-center gap-1 py-1.5 px-3 bg-amber-800 hover:bg-amber-700 text-white text-xs font-bold rounded-lg transition-colors"
+                >
+                  <Settings className="w-3.5 h-3.5" />
+                  APIキーを設定する
+                </button>
+              </div>
+            </div>
           </div>
         )}
 
