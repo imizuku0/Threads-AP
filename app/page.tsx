@@ -148,9 +148,7 @@ export default function YouTubeTrendsApp() {
 
   const handleDeleteSavedSummary = (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!confirm('この保存されたまとめを削除しますか？')) {
-      return;
-    }
+    
     const updatedList = savedSummaries.filter(item => item.id !== id);
     setSavedSummaries(updatedList);
     if (typeof window !== 'undefined') {

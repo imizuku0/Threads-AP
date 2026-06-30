@@ -158,7 +158,7 @@ export async function fetchYouTubeTrends(
       category: 'キーワード/トピック',
       isSpiking,
       wave,
-      videos: recentVideos.slice(0, 10),
+      videos: recentVideos.slice(0, 20),
       totalViews
     });
   }
@@ -171,7 +171,7 @@ export async function fetchYouTubeTrends(
      return (b.totalViews || 0) - (a.totalViews || 0);
   });
   
-  const sortedTrends = trendsResult.slice(0, 10).map((t, i) => ({ ...t, id: i + 1 }));
+  const sortedTrends = trendsResult.slice(0, 20).map((t, i) => ({ ...t, id: i + 1 }));
 
   return {
     success: true,
@@ -240,7 +240,7 @@ export async function fetchYouTubePopularVideos(token: string, videoType: string
     category: 'YouTube急上昇',
     isSpiking: true,
     wave: [], // グラフは表示しない
-    videos: recentVideos.slice(0, 50),
+    videos: recentVideos.slice(0, 20),
     totalViews
   }];
 
@@ -313,14 +313,16 @@ export async function generateSummarySiteClient(youtubeToken: string, geminiToke
 ${comments.map((c: any) => `[${c.likeCount}いいね] ${c.authorDisplayName}: ${c.textOriginal}`).join('\n')}
 
 要件:
-1.  HTML、CSSを含む1つの完全なHTMLファイルとして出力してください（プレビュー表示用）。
-2.  Tailwind CSSをCDN（<script src="https://cdn.tailwindcss.com"></script>）で読み込んでスタイリングしてください。
-3.  まとめサイトの構成（ヘッダー、アイキャッチタイトル、スレッド風のレスや吹き出し風のコメント表示、AIによる総評やまとめ）を含めてください。
-4.  「元動画へのリンク」として、動画URL: https://www.youtube.com/watch?v=${videoId} を必ず記載してください。
-5.  レイアウトは、シンプルで読みやすいブログスタイルで統一してください。
-6.  存在しないリンクや、プレースホルダー的な偽のリンク（メニューや外部サイトへのダミーなど）は絶対に含めないでください。動画へのリンク以外は禁止です。
-7.  ユーザーが見て楽しめるような、キャッチーでまとまった内容にしてください。
-8.  レスポンスはHTMLのコードのみ（\`\`\`html ... \`\`\` は不可、最初から <!DOCTYPE html> で始めてください）にしてください。
+1. HTML構造とCSSスタイルを明確に分離してください。
+2. HTMLはセマンティックな構造（header, main, article, footerなど）で記述し、デザイン用のクラス名は内容を表すもの（例: summary-container, comment-item）にしてください。
+3. スタイルは全て <style> タグ内にCSSとして記述してください。デザイン変更がCSSのみで完結するように、CSS変数（Custom Properties）を積極的に活用し、配色やレイアウトを管理してください。
+4. Tailwind CSSは使用せず、純粋なCSS（Vanilla CSS）のみでスタイリングしてください。また、ブログ（ライブドアブログ等）の既存のレイアウトを崩さないように、 \`*\` や \`body\`、\`html\` などのグローバルリセットや全体へのスタイル適用は絶対に行わず、生成するコンポーネント固有のクラス名（例: \`.summary-wrapper\` など）に対してのみスタイルを適用してください。
+5. 「元動画へのリンク」として、動画URL: https://www.youtube.com/watch?v=${videoId} をサムネイル画像（画像URL: https://img.youtube.com/vi/${videoId}/hqdefault.jpg または maxresdefault.jpg）を使ったクリック可能な画像リンクとして必ず記載してください。テキストリンクだけでなく、記事内でサムネイル画像が大きく表示されるようにしてください。
+6. レイアウトは、シンプルで読みやすいブログスタイルで統一してください。
+7. 存在しないリンクや、プレースホルダー的な偽のリンクは絶対に含めないでください。動画へのリンク以外は禁止です。
+8. ユーザーが見て楽しめるような、キャッチーでまとまった内容にしてください。
+9. 生成するまとめサイトのテキスト内に「AI」という単語は一切含めないでください。人間が作成したかのような自然なまとめサイトにしてください。
+10. レスポンスはHTMLのコードのみ（\`\`\`html ... \`\`\` は不可）とし、ブログの投稿欄にそのまま貼り付けられるように \`<!DOCTYPE html>\` や \`<html>\`、\`<body>\` タグは含めず、全体のラッパーとなる \`<div>\` タグ（例: \`<div class="summary-wrapper">\`）から始めてください。
 `;
 
   const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${geminiToken}`;
