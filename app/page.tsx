@@ -47,10 +47,12 @@ export default function YouTubeTrendsApp() {
   const [showSettings, setShowSettings] = useState(false);
   const [inputToken, setInputToken] = useState('');
   const [inputGeminiToken, setInputGeminiToken] = useState('');
+  const [inputGeminiModel, setInputGeminiModel] = useState('gemini-3.5-flash');
   const [inputKeywords, setInputKeywords] = useState('AIツール, Next.js, ガジェット, 投資');
   
   const [activeToken, setActiveToken] = useState('');
   const [activeGeminiToken, setActiveGeminiToken] = useState('');
+  const [activeGeminiModel, setActiveGeminiModel] = useState('gemini-3.5-flash');
   const [activeKeywords, setActiveKeywords] = useState('AIツール, Next.js, ガジェット, 投資');
   const [videoType, setVideoType] = useState<'all' | 'regular' | 'shorts'>('all');
   const [activeVideoType, setActiveVideoType] = useState<'all' | 'regular' | 'shorts'>('all');
@@ -101,7 +103,7 @@ export default function YouTubeTrendsApp() {
     
     setGeneratingVideoId(videoId);
     try {
-      const res = await generateSummarySiteClient(activeToken, activeGeminiToken, videoId, title);
+      const res = await generateSummarySiteClient(activeToken, activeGeminiToken, videoId, title, activeGeminiModel);
       if (res.success && res.html) {
         setSummaryHtml(res.html);
         setLivedoorPostTitle(`${title} 反応まとめ`);
@@ -292,6 +294,7 @@ export default function YouTubeTrendsApp() {
     if (typeof window !== 'undefined') {
       const savedToken = localStorage.getItem('youtube_token') || '';
       const savedGeminiToken = localStorage.getItem('gemini_token') || '';
+      const savedGeminiModel = localStorage.getItem('gemini_model') || 'gemini-3.5-flash';
       const savedLivedoorId = localStorage.getItem('livedoor_id') || '';
       const savedLivedoorBlogId = localStorage.getItem('livedoor_blog_id') || savedLivedoorId;
       const savedLivedoorApiKey = localStorage.getItem('livedoor_api_key') || '';
@@ -312,6 +315,10 @@ export default function YouTubeTrendsApp() {
       if (savedGeminiToken) {
         setInputGeminiToken(savedGeminiToken);
         setActiveGeminiToken(savedGeminiToken);
+      }
+      if (savedGeminiModel) {
+        setInputGeminiModel(savedGeminiModel);
+        setActiveGeminiModel(savedGeminiModel);
       }
       if (savedLivedoorId) {
         setInputLivedoorId(savedLivedoorId);
@@ -342,6 +349,7 @@ export default function YouTubeTrendsApp() {
     e.preventDefault();
     setActiveToken(inputToken);
     setActiveGeminiToken(inputGeminiToken);
+    setActiveGeminiModel(inputGeminiModel);
     setActiveLivedoorId(inputLivedoorId);
     setActiveLivedoorBlogId(inputLivedoorBlogId);
     setActiveLivedoorApiKey(inputLivedoorApiKey);
@@ -354,6 +362,7 @@ export default function YouTubeTrendsApp() {
     if (typeof window !== 'undefined') {
       localStorage.setItem('youtube_token', inputToken);
       localStorage.setItem('gemini_token', inputGeminiToken);
+      localStorage.setItem('gemini_model', inputGeminiModel);
       localStorage.setItem('livedoor_id', inputLivedoorId);
       localStorage.setItem('livedoor_blog_id', inputLivedoorBlogId);
       localStorage.setItem('livedoor_api_key', inputLivedoorApiKey);
@@ -441,9 +450,25 @@ export default function YouTubeTrendsApp() {
                   value={inputGeminiToken}
                   onChange={(e) => setInputGeminiToken(e.target.value)}
                   placeholder="Gemini API キーを入力 (任意)"
-                  className="w-full bg-black border border-gray-700 rounded-lg px-4 py-2 text-sm text-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all font-mono"
+                  className="w-full bg-black border border-gray-700 rounded-lg px-4 py-2 text-sm text-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all font-mono mb-2"
                   disabled={connectionStatus === 'testing'}
                 />
+                <div className="space-y-1">
+                  <label className="text-xs text-gray-400 font-medium ml-1">使用する Gemini モデル</label>
+                  <select
+                    value={inputGeminiModel}
+                    onChange={(e) => setInputGeminiModel(e.target.value)}
+                    className="w-full bg-black border border-gray-700 rounded-lg px-4 py-2 text-sm text-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all appearance-none"
+                    disabled={connectionStatus === 'testing'}
+                  >
+                    <option value="gemini-2.5-flash">Gemini 2.5 Flash (推奨・高速)</option>
+                    <option value="gemini-2.5-pro">Gemini 2.5 Pro (高精度・複雑な分析)</option>
+                    <option value="gemini-2.0-flash">Gemini 2.0 Flash</option>
+                    <option value="gemini-1.5-flash">Gemini 1.5 Flash</option>
+                    <option value="gemini-1.5-pro">Gemini 1.5 Pro</option>
+                    <option value="gemini-3.5-flash">Gemini 3.5 Flash (旧デフォルト)</option>
+                  </select>
+                </div>
               </div>
 
               <div className="space-y-3 mt-4">

@@ -292,7 +292,7 @@ export async function fetchYouTubeComments(token: string, videoId: string, maxRe
   return comments;
 }
 
-export async function generateSummarySiteClient(youtubeToken: string, geminiToken: string, videoId: string, videoTitle: string) {
+export async function generateSummarySiteClient(youtubeToken: string, geminiToken: string, videoId: string, videoTitle: string, model: string = 'gemini-3.5-flash') {
   if (!geminiToken) {
     throw new Error('Gemini APIキーが設定されていません。');
   }
@@ -325,7 +325,8 @@ ${comments.map((c: any) => `[${c.likeCount}いいね] ${c.authorDisplayName}: ${
 10. レスポンスはHTMLのコードのみ（\`\`\`html ... \`\`\` は不可）とし、ブログの投稿欄にそのまま貼り付けられるように \`<!DOCTYPE html>\` や \`<html>\`、\`<body>\` タグは含めず、全体のラッパーとなる \`<div>\` タグ（例: \`<div class="summary-wrapper">\`）から始めてください。
 `;
 
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${geminiToken}`;
+  const modelName = model || 'gemini-3.5-flash';
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${geminiToken}`;
   
   const response = await fetch(url, {
     method: 'POST',
@@ -351,7 +352,7 @@ ${comments.map((c: any) => `[${c.likeCount}いいね] ${c.authorDisplayName}: ${
       throw new Error(`Gemini API呼び出しに失敗しました: ${errorDetail}\n\n【原因の可能性】\n1. 入力したAPIキーが「Gemini APIキー」ではなく「YouTube APIキー」になっている可能性があります。別々に取得して入力してください。\n2. Gemini APIキーにアクセス制限（IP制限やリファラー制限など）がかかっている可能性があります。\n3. Google AI Studioで新しいAPIキーを作成してお試しください。`);
     }
     
-    throw new Error(`Gemini API呼び出しに失敗しました: ${errorDetail} (APIキーが有効であるか、モデル 'gemini-3.5-flash' が利用可能かご確認ください。)`);
+    throw new Error(`Gemini API呼び出しに失敗しました: ${errorDetail} (APIキーが有効であるか、モデル '${modelName}' が利用可能かご確認ください。)`);
   }
 
   const data = await response.json();
