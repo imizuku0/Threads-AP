@@ -292,6 +292,46 @@ export async function fetchYouTubeComments(token: string, videoId: string, maxRe
   return comments;
 }
 
+export function addYoutubeTimestampLinks(html: string, videoId: string): string {
+  // HTMLタグとテキストノードを分割する正規表現
+  const parts = html.split(/(<[^>]+>)/g);
+  
+  // タイムスタンプ（HH:MM:SS または MM:SS）にマッチする正規表現
+  // 例: 1:23:45, 01:23:45, 12:34, 1:23
+  // 誤判定を防ぐため、前後のコロン、スラッシュ、数字に囲まれていないことを条件にする
+  const timestampRegex = /(?<![:/0-9])(\d{1,2}):([0-5]\d)(?::([0-5]\d))?(?![:0-9])/g;
+
+  return parts.map(part => {
+    // もしタグであればそのまま返す
+    if (part.startsWith('<')) {
+      return part;
+    }
+    
+    // タグ以外（テキストノード）であれば、タイムスタンプをリンクに置換
+    return part.replace(timestampRegex, (match, p1, p2, p3) => {
+      let hours = 0;
+      let minutes = 0;
+      let seconds = 0;
+      
+      if (p3 !== undefined) {
+        // HH:MM:SS 形式
+        hours = parseInt(p1, 10);
+        minutes = parseInt(p2, 10);
+        seconds = parseInt(p3, 10);
+      } else {
+        // MM:SS 形式
+        minutes = parseInt(p1, 10);
+        seconds = parseInt(p2, 10);
+      }
+      
+      const totalSeconds = hours * 3600 + minutes * 60 + seconds;
+      const link = `https://www.youtube.com/watch?v=${videoId}&t=${totalSeconds}`;
+      
+      return `<a href="${link}" target="_blank" rel="noopener noreferrer" class="yt-timestamp-link" style="color: #1e90ff; text-decoration: underline; font-weight: 500; margin: 0 2px;">${match}</a>`;
+    });
+  }).join('');
+}
+
 export async function generateSummarySiteClient(youtubeToken: string, geminiToken: string, videoId: string, videoTitle: string, model: string = 'gemini-3.5-flash') {
   if (!geminiToken) {
     throw new Error('Gemini APIキーが設定されていません。');
@@ -318,11 +358,13 @@ ${comments.map((c: any) => `[${c.likeCount}いいね] ${c.authorDisplayName}: ${
 3. スタイルは全て <style> タグ内にCSSとして記述してください。デザイン変更がCSSのみで完結するように、CSS変数（Custom Properties）を積極的に活用し、配色やレイアウトを管理してください。
 4. Tailwind CSSは使用せず、純粋なCSS（Vanilla CSS）のみでスタイリングしてください。また、ブログ（ライブドアブログ等）の既存のレイアウトを崩さないように、 \`*\` や \`body\`、\`html\` などのグローバルリセットや全体へのスタイル適用は絶対に行わず、生成するコンポーネント固有のクラス名（例: \`.summary-wrapper\` など）に対してのみスタイルを適用してください。
 5. 「元動画へのリンク」として、動画URL: https://www.youtube.com/watch?v=${videoId} をサムネイル画像（画像URL: https://img.youtube.com/vi/${videoId}/hqdefault.jpg または maxresdefault.jpg）を使ったクリック可能な画像リンクとして必ず記載してください。テキストリンクだけでなく、記事内でサムネイル画像が大きく表示されるようにしてください。
-6. レイアウトは、シンプルで読みやすいブログスタイルで統一してください。
-7. 存在しないリンクや、プレースホルダー的な偽のリンクは絶対に含めないでください。動画へのリンク以外は禁止です。
-8. ユーザーが見て楽しめるような、キャッチーでまとまった内容にしてください。
-9. 生成するまとめサイトのテキスト内に「AI」という単語は一切含めないでください。人間が作成したかのような自然なまとめサイトにしてください。
-10. レスポンスはHTMLのコードのみ（\`\`\`html ... \`\`\` は不可）とし、ブログの投稿欄にそのまま貼り付けられるように \`<!DOCTYPE html>\` や \`<html>\`、\`<body>\` タグは含めず、全体のラッパーとなる \`<div>\` タグ（例: \`<div class="summary-wrapper">\`）から始めてください。
+6. コメントや動画内容から、特定のシーン（例: 「1:23」や「12:34」、「1:02:03」などのタイムスタンプ）への言及がある場合は、積極的にタイムスタンプのテキスト（形式:「MM:SS」または「HH:MM:SS」）をそのまま記載してください。タイムスタンプは後段で自動的に再生リンクへ変換されるため、余計なHTMLリンクタグは付けず、純粋なテキスト形式（例：1:23 や 12:34）で書いてください。
+7. レイアウトは、シンプルで読みやすいブログスタイルで統一してください。
+8. 存在しないリンクや、プレースホルダー的な偽のリンクは絶対に含めないでください。動画へのリンク以外は禁止です。
+9. ユーザーが見て楽しめるような、キャッチーでまとまった内容にしてください。
+10. 生成するまとめサイトのテキスト内に「AI」という単語は一切含めないでください。人間が作成したかのような自然なまとめサイトにしてください。
+11. 生成するまとめサイトの最下部に、コピーライト表記として「© ホロライブまとめ速報V」または「© 2026 ホロライブまとめ速報V」と書かれた、シンプルで洗練されたフッター（\`.summary-footer\` など）を必ず設けてください。文字は小さく、目立ちすぎないグレーなどの配色でセンタリングしてください。
+12. レスポンスはHTMLのコードのみ（\`\`\`html ... \`\`\` は不可）とし、ブログの投稿欄にそのまま貼り付けられるように \`<!DOCTYPE html>\` や \`<html>\`、\`<body>\` タグは含めず、全体のラッパーとなる \`<div>\` タグ（例: \`<div class="summary-wrapper">\`）から始めてください。
 `;
 
   const modelName = model || 'gemini-3.5-flash';
@@ -359,6 +401,9 @@ ${comments.map((c: any) => `[${c.likeCount}いいね] ${c.authorDisplayName}: ${
   let html = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
   
   html = html.replace(/^```html\n/, '').replace(/\n```$/, '');
+
+  // タイムスタンプリンクを自動付与
+  html = addYoutubeTimestampLinks(html, videoId);
 
   return { success: true, html };
 }

@@ -60,13 +60,25 @@ export async function POST(req: NextRequest) {
     try {
       if (actualBlogId.startsWith("http://") || actualBlogId.startsWith("https://")) {
         const urlObj = new URL(actualBlogId);
-        if (urlObj.hostname === "blog.livedoor.jp") {
+        const host = urlObj.hostname;
+        
+        if (host === "blog.livedoor.jp") {
           const parts = urlObj.pathname.split("/").filter(Boolean);
           if (parts.length > 0) {
             actualBlogId = parts[0]; // e.g. "username" from "/username/"
           }
-        } else if (urlObj.hostname.endsWith(".blog.jp")) {
-          actualBlogId = urlObj.hostname.replace(".blog.jp", "");
+        } else if (
+          host.endsWith(".livedoor.blog") ||
+          host.endsWith(".livedoor.jp") ||
+          host.endsWith(".blog.jp") ||
+          host.endsWith(".doorblog.jp") ||
+          host.endsWith(".publog.jp")
+        ) {
+          // Extract subdomain (e.g. "xxxx" from "xxxx.livedoor.blog")
+          const parts = host.split(".");
+          if (parts.length >= 2) {
+            actualBlogId = parts[0];
+          }
         }
       }
     } catch (e) {
@@ -101,12 +113,8 @@ export async function POST(req: NextRequest) {
       // It's a plain ID (e.g. "roki_review" or "rokireview")
       // 1. Try standard Livedoor blogcms AtomPub HTTPS (Most reliable & recommended)
       endpoints.push(`https://livedoor.blogcms.jp/atom/blog/${actualBlogId}/article`);
-      // 2. Try standard Livedoor blogcms AtomPub HTTP
+      // 2. Try standard Livedoor blogcms AtomPub HTTP (Fallback)
       endpoints.push(`http://livedoor.blogcms.jp/atom/blog/${actualBlogId}/article`);
-      // 3. Try standard Livedoor write API HTTPS
-      endpoints.push(`https://write.blog.livedoor.com/api/atom/blog/${actualBlogId}/article`);
-      // 4. Try standard Livedoor write API HTTP
-      endpoints.push(`http://write.blog.livedoor.com/api/atom/blog/${actualBlogId}/article`);
     }
 
     let response = null;
@@ -116,6 +124,12 @@ export async function POST(req: NextRequest) {
 
     for (const url of endpoints) {
       console.log(`Attempting to post to Livedoor API endpoint: ${url}`);
+      
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => {
+        controller.abort();
+      }, 8000);
+
       try {
         const res = await fetch(url, {
           method: "POST",
@@ -125,15 +139,16 @@ export async function POST(req: NextRequest) {
             "Accept": "application/xml",
           },
           body: xmlBody,
+          signal: controller.signal,
         });
+
+        clearTimeout(timeoutId);
 
         const text = await res.text();
         const contentType = res.headers.get("content-type") || "";
         const trimmedText = text.trim();
 
         // Check if the response from this endpoint is HTML instead of XML.
-        // We check the Content-Type header and verify if the response body actually starts with an HTML structure.
-        // This avoids false positives from HTML inside the CDATA section of a successful Atom XML response.
         const isHtml = 
           contentType.includes("text/html") ||
           trimmedText.startsWith("<!DOCTYPE") ||
@@ -143,17 +158,27 @@ export async function POST(req: NextRequest) {
 
         if (isHtml) {
           console.warn(`Livedoor API endpoint ${url} returned HTML instead of XML.`);
-          lastErrorMsg = "ライブドアAPIから無効なレスポンス（HTML）が返されました。Livedoor ID、ブログID、または API Key が間違っているか、ブログ設定で「外部投稿API（AtomPub）」が有効になっているかを確認してください。";
+          lastErrorMsg = `ライブドアAPIから無効なレスポンス（HTML等）が返されました。Livedoor ID、ブログID、またはAPIキーが誤っている可能性があります。
+
+【サブブログ（例: ${actualBlogId}）への投稿設定チェック】
+1. 「Livedoor ID (ログインID)」には、サブブログのIDではなく、必ずメインブログ（メインアカウント）の「ログインID」を設定してください。
+2. 「ブログID」には、投稿先であるサブブログのID（例: ${actualBlogId}）を正確に入力してください。
+3. 「API Key」はメインブログと共通であっても、必ず管理画面（ブログ設定 ＞ API設定）の「APIキー」を正しく設定してください。`;
           responseText = text;
           lastStatus = 401;
-          continue; // Try next fallback
+          break; // Stop immediately to show this detailed configuration error to the user
         }
 
         if (!res.ok) {
           console.warn(`Livedoor API endpoint ${url} returned error status: ${res.status}`);
           let err = `Livedoor APIエラー (HTTP ${res.status} ${res.statusText})`;
           if (res.status === 401 || res.status === 403) {
-            err += " - 認証に失敗しました。Livedoor ID、API Key（ブログ設定＞外部投稿APIから取得したもの）、または外部投稿設定が「利用する」になっているか確認してください。";
+            err += ` - 認証に失敗しました。
+
+【サブブログ（例: ${actualBlogId}）への投稿設定チェック】
+1. 「Livedoor ID (ログインID)」には、サブブログのIDではなく、必ずメインブログ（メインアカウント）の「ログインID」を設定してください。
+2. 「ブログID」には、投稿先であるサブブログ of ID（例: ${actualBlogId}）を正確に入力してください。
+3. 「API Key」はメインブログと共通であっても、必ず管理画面（ブログ設定 ＞ API設定）の「APIキー」を正しく設定してください。`;
           }
           if (text.includes("<message>")) {
             const msgMatch = text.match(/<message>([^<]+)<\/message>/);
@@ -164,7 +189,11 @@ export async function POST(req: NextRequest) {
           lastErrorMsg = err;
           responseText = text;
           lastStatus = res.status;
-          continue; // Try next fallback
+          
+          if (res.status === 401 || res.status === 403) {
+            break; // Stop immediately on authentication failure to prevent masking the error
+          }
+          continue; // Try next fallback endpoint (e.g. HTTP instead of HTTPS)
         }
 
         // Success!
@@ -173,9 +202,14 @@ export async function POST(req: NextRequest) {
         break; // Stop loop on success
 
       } catch (fetchError: any) {
+        clearTimeout(timeoutId);
         console.error(`Livedoor fetch failed for endpoint ${url}:`, fetchError);
-        lastErrorMsg = `ライブドアAPIへの接続に失敗しました: ${fetchError.message || "ネットワークエラー"}`;
-        lastStatus = 502;
+        
+        const isTimeout = fetchError.name === "AbortError";
+        lastErrorMsg = isTimeout 
+          ? `ライブドアAPIへの接続がタイムアウトしました (8秒)。ブログID (${actualBlogId}) またはエンドポイントURLが間違っている可能性があります。`
+          : `ライブドアAPIへの接続に失敗しました: ${fetchError.message || "ネットワークエラー"}`;
+        lastStatus = isTimeout ? 504 : 502;
         continue; // Try next fallback
       }
     }
@@ -184,11 +218,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({
         success: false,
         error: lastErrorMsg || "すべてのエンドポイントへの投稿に失敗しました。"
-      }, { status: lastStatus });
+      }, { status: 200 }); // Return HTTP 200 to let client show the clear error message instead of general proxy error.
     }
 
     // Extract article link from Response XML
-    // Example: <link rel="alternate" type="text/html" href="http://blog.livedoor.jp/username/archives/12345.html"/>
     let articleUrl = "";
     const linkMatch = responseText.match(/<link\s+[^>]*rel=["']alternate["'][^>]*href=["']([^"']+)["']/i) || 
                       responseText.match(/href=["']([^"']+)["'][^>]*rel=["']alternate["']/i);

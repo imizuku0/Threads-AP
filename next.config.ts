@@ -1,10 +1,10 @@
 import type {NextConfig} from 'next';
 
-const isTauriBuild = process.env.TAURI_ENV_PLATFORM || process.env.TAURI_ENV_TARGET_TRIPLE;
+const isTauriBuild = process.env.TAURI_BUILD === "true";
 
 const nextConfig: NextConfig = {
-  output: isTauriBuild ? 'export' : undefined,
   reactStrictMode: true,
+  output: isTauriBuild ? 'export' : undefined,
   eslint: {
     ignoreDuringBuilds: true,
   },

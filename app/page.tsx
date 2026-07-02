@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { RefreshCw, TrendingUp, Hash, ExternalLink, Settings, Activity, AlertCircle, Key, FileText, CheckCircle2, XCircle, Loader2, Youtube, ThumbsUp, MessageSquare, Flame, Sparkles, X, Bookmark, Save, Trash2 } from 'lucide-react';
+import { RefreshCw, TrendingUp, Hash, ExternalLink, Settings, Activity, AlertCircle, Key, FileText, CheckCircle2, XCircle, Loader2, Youtube, ThumbsUp, MessageSquare, Flame, Sparkles, X, Bookmark, Save, Trash2, Edit2 } from 'lucide-react';
 import { AreaChart, Area, ResponsiveContainer, YAxis } from 'recharts';
 import { fetchYouTubeTrends, fetchYouTubePopularVideos, generateSummarySiteClient } from '@/lib/youtube';
 
@@ -31,6 +31,14 @@ type SavedSummary = {
   title: string;
   html: string;
   createdAt: number;
+};
+
+type LivedoorBlogConfig = {
+  id: string;
+  name: string;
+  livedoorId: string;
+  blogId: string;
+  apiKey: string;
 };
 
 export default function YouTubeTrendsApp() {
@@ -63,13 +71,17 @@ export default function YouTubeTrendsApp() {
   
   const [connectionStatus, setConnectionStatus] = useState<'idle' | 'testing' | 'success' | 'error'>('idle');
 
-  // Livedoor Blog State
-  const [inputLivedoorId, setInputLivedoorId] = useState('');
-  const [inputLivedoorBlogId, setInputLivedoorBlogId] = useState('');
-  const [inputLivedoorApiKey, setInputLivedoorApiKey] = useState('');
-  const [activeLivedoorId, setActiveLivedoorId] = useState('');
-  const [activeLivedoorBlogId, setActiveLivedoorBlogId] = useState('');
-  const [activeLivedoorApiKey, setActiveLivedoorApiKey] = useState('');
+  // Livedoor Blog State (Multi blog configuration)
+  const [livedoorBlogs, setLivedoorBlogs] = useState<LivedoorBlogConfig[]>([]);
+  const [selectedBlogId, setSelectedBlogId] = useState<string>('');
+  const [editingBlogId, setEditingBlogId] = useState<string | null>(null);
+  const [deletingBlogId, setDeletingBlogId] = useState<string | null>(null);
+
+  // Temporaries for adding a new blog / editing blog
+  const [newBlogName, setNewBlogName] = useState('');
+  const [newBlogLivedoorId, setNewBlogLivedoorId] = useState('');
+  const [newBlogBlogId, setNewBlogBlogId] = useState('');
+  const [newBlogApiKey, setNewBlogApiKey] = useState('');
 
   const [isPostingToLivedoor, setIsPostingToLivedoor] = useState(false);
   const [livedoorPostTitle, setLivedoorPostTitle] = useState('');
@@ -86,6 +98,86 @@ export default function YouTubeTrendsApp() {
   const [activeTab, setActiveTab] = useState<'trends' | 'saved'>('trends');
   const [savedSummaries, setSavedSummaries] = useState<SavedSummary[]>([]);
   const [currentSavedId, setCurrentSavedId] = useState<string | null>(null);
+
+  const handleSaveLivedoorBlog = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newBlogName.trim() || !newBlogLivedoorId.trim() || !newBlogApiKey.trim()) {
+      alert('ブログ表示名、Livedoor ID、API Keyは必須入力です。');
+      return;
+    }
+
+    const bId = newBlogBlogId.trim() || newBlogLivedoorId.trim();
+
+    let updated: LivedoorBlogConfig[];
+    if (editingBlogId) {
+      // 編集モード
+      updated = livedoorBlogs.map(b => b.id === editingBlogId ? {
+        ...b,
+        name: newBlogName.trim(),
+        livedoorId: newBlogLivedoorId.trim(),
+        blogId: bId,
+        apiKey: newBlogApiKey.trim(),
+      } : b);
+      setEditingBlogId(null);
+    } else {
+      // 新規追加
+      const newBlog: LivedoorBlogConfig = {
+        id: Date.now().toString(),
+        name: newBlogName.trim(),
+        livedoorId: newBlogLivedoorId.trim(),
+        blogId: bId,
+        apiKey: newBlogApiKey.trim(),
+      };
+      updated = [...livedoorBlogs, newBlog];
+      
+      if (!selectedBlogId) {
+        setSelectedBlogId(newBlog.id);
+      }
+    }
+
+    setLivedoorBlogs(updated);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('livedoor_blogs', JSON.stringify(updated));
+    }
+
+    setNewBlogName('');
+    setNewBlogLivedoorId('');
+    setNewBlogBlogId('');
+    setNewBlogApiKey('');
+  };
+
+  const handleStartEdit = (blog: LivedoorBlogConfig) => {
+    setEditingBlogId(blog.id);
+    setNewBlogName(blog.name);
+    setNewBlogLivedoorId(blog.livedoorId);
+    setNewBlogBlogId(blog.blogId);
+    setNewBlogApiKey(blog.apiKey);
+  };
+
+  const handleCancelEdit = () => {
+    setEditingBlogId(null);
+    setNewBlogName('');
+    setNewBlogLivedoorId('');
+    setNewBlogBlogId('');
+    setNewBlogApiKey('');
+  };
+
+  const executeDeleteLivedoorBlog = (id: string) => {
+    const updated = livedoorBlogs.filter(b => b.id !== id);
+    setLivedoorBlogs(updated);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('livedoor_blogs', JSON.stringify(updated));
+    }
+
+    if (selectedBlogId === id) {
+      setSelectedBlogId(updated.length > 0 ? updated[0].id : '');
+    }
+    
+    if (editingBlogId === id) {
+      handleCancelEdit();
+    }
+    setDeletingBlogId(null);
+  };
 
   const handleGenerateSummary = async (e: React.MouseEvent, videoId: string, title: string) => {
     e.preventDefault();
@@ -169,8 +261,17 @@ export default function YouTubeTrendsApp() {
 
   const handlePostToLivedoor = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!activeLivedoorId || !activeLivedoorApiKey) {
-      alert("Livedoor ID と API Key を設定画面から入力してください。");
+    
+    const targetBlog = livedoorBlogs.find(b => b.id === selectedBlogId);
+    if (!targetBlog) {
+      alert("投稿先ブログを選択、または設定から追加してください。");
+      return;
+    }
+
+    const { livedoorId, blogId, apiKey } = targetBlog;
+
+    if (!livedoorId || !apiKey) {
+      alert("選択されたブログの Livedoor ID または API Key が設定されていません。");
       return;
     }
     if (!livedoorPostTitle) {
@@ -187,41 +288,63 @@ export default function YouTubeTrendsApp() {
     setLivedoorError(null);
 
     try {
-      const response = await fetch("/api/livedoor/post", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          livedoorId: activeLivedoorId,
-          blogId: activeLivedoorBlogId || activeLivedoorId,
-          apiKey: activeLivedoorApiKey,
+      // Check if running in Tauri environment
+      const isTauri = typeof window !== "undefined" && !!(window as any).__TAURI_INTERNALS__;
+
+      if (isTauri) {
+        const { invoke } = await import("@tauri-apps/api/core");
+        const res = await invoke<any>("post_to_livedoor_rust", {
+          livedoorId: livedoorId,
+          blogId: blogId || livedoorId,
+          apiKey: apiKey,
           title: livedoorPostTitle,
           htmlContent: summaryHtml,
           draft: isLivedoorDraft,
-        }),
-      });
-
-      const text = await response.text();
-      let data;
-      try {
-        data = JSON.parse(text);
-      } catch (parseError) {
-        console.error("Failed to parse JSON response:", text);
-        if (text.includes("<title>Starting Server...</title>")) {
-          throw new Error("開発サーバーが起動中です。数秒待ってから、もう一度「投稿する」ボタンを押してください。");
+        });
+        
+        if (res.success) {
+          setLivedoorSuccessUrl(res.url);
+        } else {
+          setLivedoorError(res.error || "投稿に失敗しました。");
         }
-        const cleanText = text.length > 500 ? text.substring(0, 500) + "..." : text;
-        throw new Error(`サーバーから無効なレスポンス（HTML等）が返されました (HTTP ${response.status} ${response.statusText}):\n\n${cleanText}`);
-      }
-
-      if (data.success) {
-        setLivedoorSuccessUrl(data.url);
       } else {
-        setLivedoorError(data.error || "投稿に失敗しました。");
+        const response = await fetch("/api/livedoor/post", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            livedoorId: livedoorId,
+            blogId: blogId || livedoorId,
+            apiKey: apiKey,
+            title: livedoorPostTitle,
+            htmlContent: summaryHtml,
+            draft: isLivedoorDraft,
+          }),
+        });
+
+        const text = await response.text();
+        let data;
+        try {
+          data = JSON.parse(text);
+        } catch (parseError) {
+          console.error("Failed to parse JSON response:", text);
+          if (text.includes("<title>Starting Server...</title>")) {
+            throw new Error("開発サーバーが起動中です。数秒待ってから、もう一度「投稿する」ボタンを押してください。");
+          }
+          const cleanText = text.length > 500 ? text.substring(0, 500) + "..." : text;
+          throw new Error(`サーバーから無効なレスポンス（HTML等）が返されました (HTTP ${response.status} ${response.statusText}):\n\n${cleanText}`);
+        }
+
+        if (data.success) {
+          setLivedoorSuccessUrl(data.url);
+        } else {
+          setLivedoorError(data.error || "投稿に失敗しました。");
+        }
       }
     } catch (err: any) {
-      setLivedoorError(err.message || "通信エラーが発生しました。");
+      const errMsg = typeof err === "string" ? err : (err?.message || "通信エラーが発生しました。");
+      setLivedoorError(errMsg);
     } finally {
       setIsPostingToLivedoor(false);
     }
@@ -295,10 +418,32 @@ export default function YouTubeTrendsApp() {
       const savedToken = localStorage.getItem('youtube_token') || '';
       const savedGeminiToken = localStorage.getItem('gemini_token') || '';
       const savedGeminiModel = localStorage.getItem('gemini_model') || 'gemini-3.5-flash';
+      const savedSummariesStr = localStorage.getItem('saved_summaries') || '[]';
+      
+      const savedLivedoorBlogsStr = localStorage.getItem('livedoor_blogs') || '[]';
+      let loadedBlogs: LivedoorBlogConfig[] = [];
+      try {
+        loadedBlogs = JSON.parse(savedLivedoorBlogsStr);
+      } catch (e) {
+        console.error('Failed to parse saved livedoor blogs:', e);
+      }
+
+      // Migration from old single-blog config
       const savedLivedoorId = localStorage.getItem('livedoor_id') || '';
       const savedLivedoorBlogId = localStorage.getItem('livedoor_blog_id') || savedLivedoorId;
       const savedLivedoorApiKey = localStorage.getItem('livedoor_api_key') || '';
-      const savedSummariesStr = localStorage.getItem('saved_summaries') || '[]';
+
+      if (savedLivedoorId && savedLivedoorApiKey && loadedBlogs.length === 0) {
+        const defaultBlog: LivedoorBlogConfig = {
+          id: 'default',
+          name: 'マイブログ',
+          livedoorId: savedLivedoorId,
+          blogId: savedLivedoorBlogId,
+          apiKey: savedLivedoorApiKey
+        };
+        loadedBlogs = [defaultBlog];
+        localStorage.setItem('livedoor_blogs', JSON.stringify(loadedBlogs));
+      }
       
       /* eslint-disable react-hooks/set-state-in-effect */
       if (savedSummariesStr) {
@@ -320,17 +465,10 @@ export default function YouTubeTrendsApp() {
         setInputGeminiModel(savedGeminiModel);
         setActiveGeminiModel(savedGeminiModel);
       }
-      if (savedLivedoorId) {
-        setInputLivedoorId(savedLivedoorId);
-        setActiveLivedoorId(savedLivedoorId);
-      }
-      if (savedLivedoorBlogId) {
-        setInputLivedoorBlogId(savedLivedoorBlogId);
-        setActiveLivedoorBlogId(savedLivedoorBlogId);
-      }
-      if (savedLivedoorApiKey) {
-        setInputLivedoorApiKey(savedLivedoorApiKey);
-        setActiveLivedoorApiKey(savedLivedoorApiKey);
+      
+      setLivedoorBlogs(loadedBlogs);
+      if (loadedBlogs.length > 0) {
+        setSelectedBlogId(loadedBlogs[0].id);
       }
       /* eslint-enable react-hooks/set-state-in-effect */
 
@@ -350,9 +488,6 @@ export default function YouTubeTrendsApp() {
     setActiveToken(inputToken);
     setActiveGeminiToken(inputGeminiToken);
     setActiveGeminiModel(inputGeminiModel);
-    setActiveLivedoorId(inputLivedoorId);
-    setActiveLivedoorBlogId(inputLivedoorBlogId);
-    setActiveLivedoorApiKey(inputLivedoorApiKey);
     setActiveKeywords(inputKeywords);
     setActiveVideoType(videoType);
     setActiveTimeRange(timeRange);
@@ -363,9 +498,6 @@ export default function YouTubeTrendsApp() {
       localStorage.setItem('youtube_token', inputToken);
       localStorage.setItem('gemini_token', inputGeminiToken);
       localStorage.setItem('gemini_model', inputGeminiModel);
-      localStorage.setItem('livedoor_id', inputLivedoorId);
-      localStorage.setItem('livedoor_blog_id', inputLivedoorBlogId);
-      localStorage.setItem('livedoor_api_key', inputLivedoorApiKey);
     }
     
     const success = await fetchTrends(inputToken, inputKeywords, videoType, timeRange, searchMode);
@@ -471,44 +603,158 @@ export default function YouTubeTrendsApp() {
                 </div>
               </div>
 
-              <div className="space-y-3 mt-4">
+              <div className="space-y-4 mt-4 border-t border-gray-800 pt-4">
                 <div className="p-3 bg-green-950/40 border border-green-800/40 rounded-lg text-xs text-green-300">
                   <strong>ライブドアブログ 投稿設定 (AtomPub API)</strong><br/>
-                  作成した反応まとめ記事を、ご自身のライブドアブログにボタンひとつで下書き・公開投稿できます。（「ブログID」の代わりに、お使いの「ルートエンドポイントURL」をそのまま入力しても投稿可能です）
+                  作成した反応まとめ記事を、ご自身のライブドアブログにボタンひとつで下書き・公開投稿できます。複数の投稿先ブログを登録可能です。
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  <div className="space-y-1">
-                    <label className="text-[10px] text-gray-400 font-semibold ml-1">Livedoor ID (ログインID)</label>
-                    <input
-                      type="text"
-                      value={inputLivedoorId}
-                      onChange={(e) => setInputLivedoorId(e.target.value)}
-                      placeholder="例: livedoor_user"
-                      className="w-full bg-black border border-gray-700 rounded-lg px-4 py-2 text-sm text-white focus:outline-none focus:border-green-500 focus:ring-1 focus:ring-green-500 transition-all"
-                      disabled={connectionStatus === 'testing'}
-                    />
+
+                {/* 登録済みのブログリスト */}
+                <div className="space-y-2">
+                  <label className="text-xs font-semibold text-gray-400">設定済みのブログ先一覧 ({livedoorBlogs.length})</label>
+                  {livedoorBlogs.length === 0 ? (
+                    <div className="text-xs text-gray-500 bg-black border border-gray-800 rounded-lg p-3 text-center">
+                      登録されているブログはありません。下のフォームから追加してください。
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 gap-2">
+                      {livedoorBlogs.map((blog) => (
+                        <div key={blog.id} className={`flex items-center justify-between bg-black border rounded-xl p-3 gap-3 transition-colors ${editingBlogId === blog.id ? 'border-green-500 bg-green-950/10' : 'border-gray-800'}`}>
+                          <div className="min-w-0">
+                            <p className="text-sm font-semibold text-white truncate flex items-center gap-1.5">
+                              {blog.name}
+                              {editingBlogId === blog.id && (
+                                <span className="px-1.5 py-0.5 bg-green-900/60 border border-green-700 text-green-300 text-[9px] font-bold rounded">
+                                  編集中
+                                </span>
+                              )}
+                            </p>
+                            <p className="text-[10px] text-gray-500 font-mono truncate">
+                              ID: {blog.livedoorId} | Blog ID: {blog.blogId}
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            {deletingBlogId === blog.id ? (
+                              <div className="flex items-center gap-1.5 bg-red-950/20 border border-red-900/30 px-2.5 py-1 rounded-lg">
+                                <span className="text-[10px] text-red-300 font-medium whitespace-nowrap">削除しますか？</span>
+                                <button
+                                  type="button"
+                                  onClick={() => executeDeleteLivedoorBlog(blog.id)}
+                                  className="px-2 py-1 bg-red-700 hover:bg-red-600 text-white rounded text-[10px] font-bold transition-colors cursor-pointer"
+                                >
+                                  はい
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setDeletingBlogId(null)}
+                                  className="px-2 py-1 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded text-[10px] font-medium transition-colors cursor-pointer"
+                                >
+                                  いいえ
+                                </button>
+                              </div>
+                            ) : (
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={() => handleStartEdit(blog)}
+                                  className="p-1.5 bg-gray-900 hover:bg-gray-800 text-gray-300 hover:text-white rounded-lg transition-colors border border-gray-800 text-xs flex items-center gap-1 cursor-pointer"
+                                >
+                                  <Edit2 className="w-3.5 h-3.5" />
+                                  編集
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setDeletingBlogId(blog.id)}
+                                  className="p-1.5 bg-gray-900 hover:bg-red-950/40 text-gray-400 hover:text-red-400 rounded-lg transition-colors border border-gray-800 hover:border-red-900/30 text-xs flex items-center gap-1 cursor-pointer"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                  削除
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* ブログ追加/編集フォーム */}
+                <div className="bg-gray-950/50 border border-gray-800/80 p-4 rounded-xl space-y-3">
+                  <h4 className="text-xs font-semibold text-green-400 flex items-center gap-1">
+                    {editingBlogId ? (
+                      <>
+                        <Edit2 className="w-3.5 h-3.5 animate-pulse" />
+                        ブログ設定を編集
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles className="w-3.5 h-3.5" />
+                        新しいブログを追加
+                      </>
+                    )}
+                  </h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <label className="text-[10px] text-gray-400 font-semibold">ブログ表示名（識別用）</label>
+                      <input
+                        type="text"
+                        value={newBlogName}
+                        onChange={(e) => setNewBlogName(e.target.value)}
+                        placeholder="例: ホロライブまとめブログ"
+                        className="w-full bg-black border border-gray-700 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-green-500"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[10px] text-gray-400 font-semibold">Livedoor ID (ログインID)</label>
+                      <input
+                        type="text"
+                        value={newBlogLivedoorId}
+                        onChange={(e) => setNewBlogLivedoorId(e.target.value)}
+                        placeholder="例: livedoor_user"
+                        className="w-full bg-black border border-gray-700 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-green-500"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[10px] text-gray-400 font-semibold">ブログID（ルートエンドポイントURL可）</label>
+                      <input
+                        type="text"
+                        value={newBlogBlogId}
+                        onChange={(e) => setNewBlogBlogId(e.target.value)}
+                        placeholder="例: roki_review (空欄ならLivedoor IDと同じ)"
+                        className="w-full bg-black border border-gray-700 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-green-500"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[10px] text-gray-400 font-semibold">API Key（※管理画面から取得）</label>
+                      <input
+                        type="password"
+                        value={newBlogApiKey}
+                        onChange={(e) => setNewBlogApiKey(e.target.value)}
+                        placeholder="API Keyを入力"
+                        className="w-full bg-black border border-gray-700 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-green-500 font-mono"
+                      />
+                    </div>
                   </div>
-                  <div className="space-y-1">
-                    <label className="text-[10px] text-gray-400 font-semibold ml-1">ブログID（またはルートエンドポイントURL）</label>
-                    <input
-                      type="text"
-                      value={inputLivedoorBlogId}
-                      onChange={(e) => setInputLivedoorBlogId(e.target.value)}
-                      placeholder="例: roki_review または https://livedoor.blogcms.jp/atompub/roki_review"
-                      className="w-full bg-black border border-gray-700 rounded-lg px-4 py-2 text-sm text-white focus:outline-none focus:border-green-500 focus:ring-1 focus:ring-green-500 transition-all"
-                      disabled={connectionStatus === 'testing'}
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-[10px] text-gray-400 font-semibold ml-1">API Key（※ログインパスワード不可）</label>
-                    <input
-                      type="password"
-                      value={inputLivedoorApiKey}
-                      onChange={(e) => setInputLivedoorApiKey(e.target.value)}
-                      placeholder="管理画面から取得したAPI Key"
-                      className="w-full bg-black border border-gray-700 rounded-lg px-4 py-2 text-sm text-white focus:outline-none focus:border-green-500 focus:ring-1 focus:ring-green-500 transition-all font-mono"
-                      disabled={connectionStatus === 'testing'}
-                    />
+                  <div className="flex justify-end gap-2 pt-1">
+                    {editingBlogId && (
+                      <button
+                        type="button"
+                        onClick={handleCancelEdit}
+                        className="px-4 py-1.5 bg-gray-900 hover:bg-gray-800 text-gray-300 text-xs font-semibold rounded-lg transition-colors flex items-center gap-1 border border-gray-800 cursor-pointer"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                        キャンセル
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={handleSaveLivedoorBlog}
+                      className="px-4 py-1.5 bg-green-700 hover:bg-green-600 text-white text-xs font-semibold rounded-lg transition-colors flex items-center gap-1 cursor-pointer"
+                    >
+                      <Save className="w-3.5 h-3.5" />
+                      {editingBlogId ? '設定を保存' : 'ブログを追加'}
+                    </button>
                   </div>
                 </div>
               </div>
@@ -1088,19 +1334,35 @@ export default function YouTubeTrendsApp() {
                       ライブドアブログに投稿
                     </h4>
 
-                    {(!activeLivedoorId || !activeLivedoorApiKey) ? (
+                    {livedoorBlogs.length === 0 ? (
                       <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800 space-y-2">
                         <p className="font-semibold flex items-center gap-1">
                           <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
                           ブログ設定が必要です
                         </p>
                         <p className="leading-relaxed text-[11px]">
-                          まとめサイトをライブドアブログに直接投稿するには、ヘッダーの「設定（ギア）アイコン」から <strong>Livedoor ID</strong> と <strong>API Key</strong> を設定してください。
+                          まとめサイトをライブドアブログに直接投稿するには、ヘッダーの「設定（ギア）アイコン」からライブドアブログの投稿先を追加してください。
                         </p>
                       </div>
                     ) : (
                       <form onSubmit={handlePostToLivedoor} className="space-y-4 flex-1 flex flex-col justify-between">
                         <div className="space-y-4">
+                          <div className="space-y-1">
+                            <label className="text-xs font-bold text-gray-600">投稿先ブログを選択</label>
+                            <select
+                              value={selectedBlogId}
+                              onChange={(e) => setSelectedBlogId(e.target.value)}
+                              className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-xs text-gray-900 focus:outline-none focus:border-green-500 focus:ring-1 focus:ring-green-500 transition-all font-medium"
+                              disabled={isPostingToLivedoor}
+                            >
+                              {livedoorBlogs.map((blog) => (
+                                <option key={blog.id} value={blog.id}>
+                                  {blog.name} ({blog.livedoorId})
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+
                           <div className="space-y-1">
                             <label className="text-xs font-bold text-gray-600">公開設定</label>
                             <div className="grid grid-cols-2 gap-2">
