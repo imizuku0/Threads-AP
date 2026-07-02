@@ -332,7 +332,7 @@ export function addYoutubeTimestampLinks(html: string, videoId: string): string 
   }).join('');
 }
 
-export async function generateSummarySiteClient(youtubeToken: string, geminiToken: string, videoId: string, videoTitle: string, model: string = 'gemini-3.5-flash') {
+export async function generateSummarySiteClient(youtubeToken: string, geminiToken: string, videoId: string, videoTitle: string, model: string = 'gemini-3.5-flash', blogDisplayName: string = 'ホロライブまとめ速報V') {
   if (!geminiToken) {
     throw new Error('Gemini APIキーが設定されていません。');
   }
@@ -360,11 +360,27 @@ ${comments.map((c: any) => `[${c.likeCount}いいね] ${c.authorDisplayName}: ${
 5. 「元動画へのリンク」として、動画URL: https://www.youtube.com/watch?v=${videoId} をサムネイル画像（画像URL: https://img.youtube.com/vi/${videoId}/hqdefault.jpg または maxresdefault.jpg）を使ったクリック可能な画像リンクとして必ず記載してください。テキストリンクだけでなく、記事内でサムネイル画像が大きく表示されるようにしてください。
 6. コメントや動画内容から、特定のシーン（例: 「1:23」や「12:34」、「1:02:03」などのタイムスタンプ）への言及がある場合は、積極的にタイムスタンプのテキスト（形式:「MM:SS」または「HH:MM:SS」）をそのまま記載してください。タイムスタンプは後段で自動的に再生リンクへ変換されるため、余計なHTMLリンクタグは付けず、純粋なテキスト形式（例：1:23 や 12:34）で書いてください。
 7. レイアウトは、シンプルで読みやすいブログスタイルで統一してください。
-8. 存在しないリンクや、プレースホルダー的な偽のリンクは絶対に含めないでください。動画へのリンク以外は禁止です。
+8. 存在しないリンクや、プレースホルダー的な偽のリンクは絶対に含めないでください。動画へのリンク、元動画サムネイル、および下記のスクリーンショット画像以外の外部画像やリンクは禁止です。
 9. ユーザーが見て楽しめるような、キャッチーでまとまった内容にしてください。
 10. 生成するまとめサイトのテキスト内に「AI」という単語は一切含めないでください。人間が作成したかのような自然なまとめサイトにしてください。
-11. 生成するまとめサイトの最下部に、コピーライト表記として「© ホロライブまとめ速報V」または「© 2026 ホロライブまとめ速報V」と書かれた、シンプルで洗練されたフッター（\`.summary-footer\` など）を必ず設けてください。文字は小さく、目立ちすぎないグレーなどの配色でセンタリングしてください。
-12. レスポンスはHTMLのコードのみ（\`\`\`html ... \`\`\` は不可）とし、ブログの投稿欄にそのまま貼り付けられるように \`<!DOCTYPE html>\` や \`<html>\`、\`<body>\` タグは含めず、全体のラッパーとなる \`<div>\` タグ（例: \`<div class="summary-wrapper">\`）から始めてください。
+11. 生成するまとめサイトの最下部に、コピーライト表記として「© ${blogDisplayName}」または「© 2026 ${blogDisplayName}」と書かれた、シンプルで洗練されたフッター（\`.summary-footer\` など）を必ず設けてください。文字は小さく、目立ちすぎないグレーなどの配色でセンタリングしてください。
+12. 記事の途中に、臨場感を高めるための「動画の場面場面のスクリーンショット画像」を【最大3枚（1枚〜3枚、0枚でも可）】、見出しの後や盛り上がっている会話の隙間など、文脈的に最も適切な場所に挿入してください。
+    - スクリーンショット画像には、以下の3つのURLのみを使用してください。これら以外の外部URLやプレースホルダー画像は一切使用しないでください。
+      * 動画前半の場面の画像（スクリーンショット1）: https://img.youtube.com/vi/${videoId}/mq1.jpg
+      * 動画中盤の場面の画像（スクリーンショット2）: https://img.youtube.com/vi/${videoId}/mq2.jpg
+      * 動画後半の場面の画像（スクリーンショット3）: https://img.youtube.com/vi/${videoId}/mq3.jpg
+    - 各画像は、以下のようにコンテナで囲み、画像のすぐ下に動画内容に沿ったキャッチーな説明キャプションを添えてください：
+      \`\`\`html
+      <div class="screenshot-container">
+        <img class="summary-screenshot" src="[画像URL]" alt="[場面の説明]" />
+        <p class="screenshot-caption">[動画内容に沿ったキャッチーな説明（例: 「（写真：驚きと笑いが広がる瞬間）」や「（写真：動画前半の盛り上がりシーン）」など）]</p>
+      </div>
+      \`\`\`
+    - <style> タグ内に、これらが美しく表示されるように以下のクラスのスタイルを定義してください：
+      * \`.screenshot-container\`: 中央寄せ、適切な上下マージン（例: 24px 0）。
+      * \`.summary-screenshot\`: 横幅100%、最大幅400px、アスペクト比16/9（または自然なアスペクト比）、角丸（例: 8px）、微細な影（例: 0 4px 12px rgba(0,0,0,0.1)）、マージン。
+      * \`.screenshot-caption\`: 小さめのフォントサイズ、やや薄い配色（グレー系）、中央寄せ、画像との適度な隙間（例: 8px）。
+13. レスポンスはHTMLのコードのみ（\`\`\`html ... \`\`\` は不可）とし、ブログの投稿欄にそのまま貼り付けられるように \`<!DOCTYPE html>\` や \`<html>\`、\`<body>\` タグは含めず、全体のラッパーとなる \`<div>\` タグ（例: \`<div class="summary-wrapper">\`）から始めてください。
 `;
 
   const modelName = model || 'gemini-3.5-flash';
@@ -404,6 +420,11 @@ ${comments.map((c: any) => `[${c.likeCount}いいね] ${c.authorDisplayName}: ${
 
   // タイムスタンプリンクを自動付与
   html = addYoutubeTimestampLinks(html, videoId);
+
+  // Fallback: もしGeminiが初期デフォルト名で生成してしまった場合、指定のブログ名に置換して一貫性を保つ
+  if (blogDisplayName && blogDisplayName !== 'ホロライブまとめ速報V') {
+    html = html.replace(/ホロライブまとめ速報V/g, blogDisplayName);
+  }
 
   return { success: true, html };
 }

@@ -195,7 +195,9 @@ export default function YouTubeTrendsApp() {
     
     setGeneratingVideoId(videoId);
     try {
-      const res = await generateSummarySiteClient(activeToken, activeGeminiToken, videoId, title, activeGeminiModel);
+      const targetBlog = livedoorBlogs.find(b => b.id === selectedBlogId);
+      const blogDisplayName = targetBlog?.name || 'ホロライブまとめ速報V';
+      const res = await generateSummarySiteClient(activeToken, activeGeminiToken, videoId, title, activeGeminiModel, blogDisplayName);
       if (res.success && res.html) {
         setSummaryHtml(res.html);
         setLivedoorPostTitle(`${title} 反応まとめ`);
@@ -257,6 +259,34 @@ export default function YouTubeTrendsApp() {
     setLivedoorSuccessUrl(null);
     setLivedoorError(null);
     setShowSummaryModal(true);
+  };
+
+  const handleBlogChange = (newBlogId: string) => {
+    const oldBlog = livedoorBlogs.find(b => b.id === selectedBlogId);
+    const oldBlogName = oldBlog?.name || 'ホロライブまとめ速報V';
+    
+    const newBlog = livedoorBlogs.find(b => b.id === newBlogId);
+    const newBlogName = newBlog?.name || 'ホロライブまとめ速報V';
+    
+    setSelectedBlogId(newBlogId);
+    
+    if (summaryHtml && newBlogName) {
+      let updatedHtml = summaryHtml;
+      
+      // 1. Replace old blog name with new blog name if different
+      if (oldBlogName && oldBlogName !== newBlogName) {
+        const escapedOld = oldBlogName.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+        const regex = new RegExp(escapedOld, 'g');
+        updatedHtml = updatedHtml.replace(regex, newBlogName);
+      }
+      
+      // 2. Also replace default "ホロライブまとめ速報V" in case it was used as fallback
+      if (newBlogName !== 'ホロライブまとめ速報V') {
+        updatedHtml = updatedHtml.replace(/ホロライブまとめ速報V/g, newBlogName);
+      }
+      
+      setSummaryHtml(updatedHtml);
+    }
   };
 
   const handlePostToLivedoor = async (e: React.FormEvent) => {
@@ -528,7 +558,24 @@ export default function YouTubeTrendsApp() {
             </div>
           </div>
           
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 flex-wrap">
+            {livedoorBlogs.length > 0 && (
+              <div className="flex items-center gap-2 bg-gray-900 px-3 py-1.5 rounded-full border border-gray-800 text-xs">
+                <span className="text-gray-400 font-medium">投稿先:</span>
+                <select
+                  value={selectedBlogId}
+                  onChange={(e) => handleBlogChange(e.target.value)}
+                  className="bg-transparent text-white font-semibold focus:outline-none cursor-pointer pr-1 text-xs"
+                >
+                  {livedoorBlogs.map((blog) => (
+                    <option key={blog.id} value={blog.id} className="bg-gray-950 text-white">
+                      {blog.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+            
             <button
               onClick={() => setShowSettings(!showSettings)}
               className={`p-2 rounded-full transition-colors ${showSettings ? 'bg-blue-900/50 text-blue-400' : 'bg-gray-900 text-gray-400 hover:bg-gray-800 hover:text-white'}`}
@@ -1351,7 +1398,7 @@ export default function YouTubeTrendsApp() {
                             <label className="text-xs font-bold text-gray-600">投稿先ブログを選択</label>
                             <select
                               value={selectedBlogId}
-                              onChange={(e) => setSelectedBlogId(e.target.value)}
+                              onChange={(e) => handleBlogChange(e.target.value)}
                               className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-xs text-gray-900 focus:outline-none focus:border-green-500 focus:ring-1 focus:ring-green-500 transition-all font-medium"
                               disabled={isPostingToLivedoor}
                             >
